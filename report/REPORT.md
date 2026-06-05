@@ -282,8 +282,8 @@ Chạy `python3 run_legal_chunk_compare.py` trên 10 tài liệu trong `new_data
 | Thành viên | Strategy | Retrieval Score (/10) | Điểm mạnh | Điểm yếu |
 |-----------|----------|----------------------|-----------|----------|
 | Tôi | LegalSectionChunker — chunk theo Chương/Mục/Điều, thêm metadata header và filter theo số hiệu | 10/10 | Giữ tốt ngữ cảnh pháp lý, top-3 relevant 5/5 trên benchmark | Cần metadata tốt; nếu không có số hiệu/alias thì mock embedding vẫn có thể nhiễu |
-| Thành viên A | FixedSizeChunker, `chunk_size=500`, `overlap=50` | 7/10 | Dễ implement, số chunk đều, có overlap để nối ngữ cảnh | Dễ cắt ngang điều/khoản, retrieval đôi khi thiếu phần tiêu đề |
-| Thành viên B | RecursiveChunker, ưu tiên `\n\n`, `\n`, `. ` | 8/10 | Cân bằng giữa độ dài và ngữ cảnh, ít bị cắt ngang câu | Chưa tận dụng trực tiếp pattern pháp luật như `Điều`, `Khoản` |
+| Lê Vũ Anh | RecursiveChunker | 8/10 | Giữ cấu trúc đoạn, dòng, câu; phù hợp văn bản dài | Có thể tạo chunk dài, cần chọn chunk size hợp lý, chưa tận dụng trực tiếp pattern pháp luật như `Điều`, `Khoản` |
+| Lê Trung Kiên | SentenceChunker | 8/10 | Giữ nguyên câu, dễ đọc hơn fixed-size | Chưa tận dụng trực tiếp pattern pháp luật như `Điều`, `Khoản` hay xuống dòng |
 
 **Strategy nào tốt nhất cho domain này? Tại sao?**
 > Với domain văn bản pháp luật, strategy tốt nhất là chunk theo cấu trúc pháp lý như `Chương`, `Mục`, `Điều`, vì đây là cách tài liệu được tổ chức tự nhiên. Strategy này giúp retrieved chunk chứa đủ tiêu đề và nội dung liên quan, từ đó agent dễ trả lời có căn cứ hơn và giảm nguy cơ hallucination.
