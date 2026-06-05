@@ -3,10 +3,12 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Callable
 
 from dotenv import load_dotenv
 
 from src.agent import KnowledgeBaseAgent
+from src.chunking import FixedSizeChunker
 from src.embeddings import (
     EMBEDDING_PROVIDER_ENV,
     LOCAL_EMBEDDING_MODEL,
@@ -27,6 +29,18 @@ SAMPLE_FILES = [
     "data/vi_retrieval_notes.md",
 ]
 
+FILES = [ 
+    "new_data/001_luat_52656.md", 
+    "new_data/002_nghi_dinh_8908.md", 
+    "new_data/003_nghi_dinh_14849.md", 
+    "new_data/004_nghi_dinh_124155.md", 
+    "new_data/005_nghi_dinh_164307.md", 
+    "new_data/006_nghi_dinh_219863.md", 
+    "new_data/007_thong_tu_18000.md", 
+    "new_data/008_thong_tu_304257.md", 
+    "new_data/009_thong_tu_313701.md", 
+    "new_data/010_thong_tu_316062.md" 
+    ]
 
 def load_documents_from_files(file_paths: list[str]) -> list[Document]:
     """Load documents from file paths for the manual demo."""
@@ -56,14 +70,59 @@ def load_documents_from_files(file_paths: list[str]) -> list[Document]:
     return documents
 
 
+def chunk_documents(documents: list[Document], chunk_size: int = 3000, overlap: int = 200) -> list[Document]:
+    chunker = FixedSizeChunker(chunk_size=chunk_size, overlap=overlap)
+    chunked_documents: list[Document] = []
+
+    for doc in documents:
+        chunks = chunker.chunk(doc.content)
+        for index, chunk in enumerate(chunks, start=1):
+            chunked_documents.append(
+                Document(
+                    id=f"{doc.id}_{index}",
+                    content=chunk,
+                    metadata={
+                        **doc.metadata,
+                        "original_doc_id": doc.id,
+                        "chunk_index": index,
+                    },
+                )
+            )
+    return chunked_documents
+
+
 def demo_llm(prompt: str) -> str:
     """A simple mock LLM for manual RAG testing."""
     preview = prompt[:400].replace("\n", " ")
     return f"[DEMO LLM] Generated answer from prompt preview: {preview}..."
 
 
+def real_llm(prompt: str) -> str:
+    """Call a real OpenAI-based LLM using the configured environment."""
+    try:
+        from openai import OpenAI
+
+        client = OpenAI()
+        llm_model = os.getenv("OPENAI_LLM_MODEL", "gpt-4o-mini")
+        response = client.chat.completions.create(
+            model=llm_model,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.choices[0].message.content
+    except Exception as exc:
+        print(f"[LLM Error: {exc}]")
+        return demo_llm(prompt)
+
+
+def get_llm_fn() -> Callable[[str], str]:
+    use_real = os.getenv("LLM_PROVIDER", "openai").strip().lower() in ("openai", "default", "real")
+    if use_real:
+        return real_llm
+    return demo_llm
+
+
 def run_manual_demo(question: str | None = None, sample_files: list[str] | None = None) -> int:
-    files = sample_files or SAMPLE_FILES
+    files = sample_files or FILES
     query = question or "Summarize the key information from the loaded files."
 
     print("=== Manual File Test ===")
@@ -83,6 +142,11 @@ def run_manual_demo(question: str | None = None, sample_files: list[str] | None 
     for doc in docs:
         print(f"  - {doc.id}: {doc.metadata['source']}")
 
+    chunk_size = int(os.getenv("CHUNK_SIZE", "3000"))
+    overlap = int(os.getenv("CHUNK_OVERLAP", "200"))
+    chunked_docs = chunk_documents(docs, chunk_size=chunk_size, overlap=overlap)
+    print(f"Converted to {len(chunked_docs)} chunked documents using chunk_size={chunk_size}, overlap={overlap}")
+
     load_dotenv(override=False)
     provider = os.getenv(EMBEDDING_PROVIDER_ENV, "mock").strip().lower()
     if provider == "local":
@@ -101,7 +165,7 @@ def run_manual_demo(question: str | None = None, sample_files: list[str] | None 
     print(f"\nEmbedding backend: {getattr(embedder, '_backend_name', embedder.__class__.__name__)}")
 
     store = EmbeddingStore(collection_name="manual_test_store", embedding_fn=embedder)
-    store.add_documents(docs)
+    store.add_documents(chunked_docs)
 
     print(f"\nStored {store.get_collection_size()} documents in EmbeddingStore")
     print("\n=== EmbeddingStore Search Test ===")
@@ -112,7 +176,9 @@ def run_manual_demo(question: str | None = None, sample_files: list[str] | None 
         print(f"   content preview: {result['content'][:120].replace(chr(10), ' ')}...")
 
     print("\n=== KnowledgeBaseAgent Test ===")
-    agent = KnowledgeBaseAgent(store=store, llm_fn=demo_llm)
+    llm_fn = get_llm_fn()
+    print(f"LLM backend: {llm_fn.__name__}")
+    agent = KnowledgeBaseAgent(store=store, llm_fn=llm_fn)
     print(f"Question: {query}")
     print("Agent answer:")
     print(agent.answer(query, top_k=3))
