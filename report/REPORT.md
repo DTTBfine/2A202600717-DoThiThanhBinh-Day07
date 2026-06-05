@@ -246,8 +246,6 @@ def extract_metadata(text: str, path: Path | None = None) -> dict[str, str]:
 
 ### So Sánh: Strategy của tôi vs Baseline
 
-Số liệu dưới đây lấy từ lần chạy thật `python3 run_legal_chunk_compare.py`.
-
 | Tài liệu | Strategy | Chunk Count | Avg Length | Retrieval Quality? |
 |-----------|----------|-------------|------------|--------------------|
 | Luật An ninh Quốc gia 2004 | best baseline: RecursiveChunker | 38 | 696.05 | Khá tốt — giữ được nhiều ngữ cảnh hơn SentenceChunker và tránh cắt quá thô như fixed-size, nhưng chưa thêm metadata vào từng chunk |
